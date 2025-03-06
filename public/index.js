@@ -21,14 +21,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "https://aution.vercel.app",
+        origin: "https://aution.vercel.app", // Asegúrate de que esta URL sea correcta
         methods: ["GET", "POST"]
     }
 });
 
 app.use(bodyParser.json());
 app.use(cors({
-    origin: "https://aution.vercel.app" 
+    origin: "https://aution.vercel.app" // Asegúrate de que esta URL sea correcta
 }));
 
 const pool = mysql.createPool({
