@@ -21,13 +21,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "https://https://aution.vercel.app",
+        origin: "https://aution.vercel.app",
         methods: ["GET", "POST"]
     }
 });
 
 app.use(bodyParser.json());
-app.use(cors()); // Habilitar CORS para todas las solicitudes
+app.use(cors({
+    origin: "https://aution.vercel.app" 
+}));
 
 const pool = mysql.createPool({
     host: 'bhho6swvu7ebona9c61t-mysql.services.clever-cloud.com',
