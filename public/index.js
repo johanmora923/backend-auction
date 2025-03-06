@@ -21,7 +21,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "https://aution-app-web.vercel.app/",
+        origin: "https://https://aution.vercel.app",
         methods: ["GET", "POST"]
     }
 });
@@ -179,7 +179,7 @@ nodemailer.createTestAccount((err, account) => {
                 to: email,
                 subject: 'Verificación de correo electrónico',
                 html: `<p>Por favor, verifica tu correo electrónico haciendo clic en el siguiente enlace:</p>
-                    <a href="https://frontend-aution-app-web.vercel.app//verify-email?token=${token}">Verificar correo electrónico</a>
+                    <a href="https://aution.vercel.app/verify-email?token=${token}">Verificar correo electrónico</a>
                     <p>El enlace expira en 1 hora.</p>`
             };
             // Enviar el correo electrónico
