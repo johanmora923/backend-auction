@@ -21,40 +21,33 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permitir solicitudes desde todos los orígenes
+        origin: "*", // Permitir solicitudes desde todos los orígenes, REVISA ESTO EN PRODUCCION
         methods: ["GET", "POST"]
     }
 });
 
 app.use(bodyParser.json());
 
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
-    credentials: true
-}));
+
+
 
 const pool = mysql.createPool({
-    host: 'bhho6swvu7ebona9c61t-mysql.services.clever-cloud.com',
-    user: 'u1ubotl5zkze8jbg',
-    password: 'P9UCmh1dsnRyAV8988ro',
-    database: 'bhho6swvu7ebona9c61t',
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
     waitForConnections: true,
-    connectionLimit: 50,
-    queueLimit: 0
+    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 10) || 50,
+    queueLimit: parseInt(process.env.DB_QUEUE_LIMIT, 10) || 0
 });
 
 // Claves de cifrado
 const algorithm = 'aes-256-cbc';
 const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex'); // Leer la clave de la variable de entorno y convertirla a un Buffer
-console.log(key)
+
 const encrypt = (text) => {
     const iv = crypto.randomBytes(16); // Generar un IV aleatorio para cada cifrado
-    console.log(iv,'1')
     const cipher = crypto.createCipheriv(algorithm, key, iv);
-    console.log(key,'1')
-    console.log(cipher,'1')
     console.log('Encrypting: 1', { text, iv: iv.toString('hex'), key: key.toString('hex') });
     let encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted, cipher.final()]);
@@ -63,11 +56,8 @@ const encrypt = (text) => {
 
 const decrypt = (text) => {
     const iv = Buffer.from(text.iv, 'hex');
-    console.log(iv,'2')
     const encryptedText = Buffer.from(text.encryptedData, 'hex');
     const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    console.log(key,'2')
-    console.log(decipher,'2')
     console.log('Decrypting: 2', { iv: text.iv, encryptedData: text.encryptedData, key: key.toString('hex') });
     let decrypted = decipher.update(encryptedText);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
@@ -89,7 +79,6 @@ io.on('connection', (socket) => {
                 WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
                 ORDER BY timestamp
             `, [sender, receiver, receiver, sender]);
-            console.log(results)
 
             // Desencriptar los mensajes
             const decryptedResults = results.map(result => {
@@ -101,7 +90,7 @@ io.on('connection', (socket) => {
             });
             socket.emit('load messages', decryptedResults);
         } catch (err) {
-            console.error(err,'aqui');
+            console.error('Error al cargar los mensajes:', err);
         }
     });
 
@@ -119,7 +108,7 @@ io.on('connection', (socket) => {
 
             io.to(`${sender_id}-${receiver_id}`).emit('messages', decryptedMessage);
         } catch (err) {
-            console.error(err);
+            console.error('Error al enviar el mensaje:', err);
         }
     });
 
@@ -141,7 +130,7 @@ io.on('connection', (socket) => {
                 socket.emit('last message', null);
             }
         } catch (err) {
-            console.error(err);
+            console.error('Error al obtener el último mensaje:', err);
         }
     });
 
@@ -204,11 +193,9 @@ nodemailer.createTestAccount((err, account) => {
     // Endpoint para verificar el correo electrónico
     app.get('/verify-email', async (req, res) => {
         const { token } = req.query;
-        console.log(token)
         try {
             // Verificar si el token existe y no ha expirado
             const [results] = await pool.query('SELECT id FROM users WHERE email_verification_token = ?', [token]);
-            console.log(results)
             if (results.length > 0) {
                 const userId = results[0].id;
                 // Actualizar al usuario para marcar el correo como verificado
@@ -268,7 +255,7 @@ app.post('/user/upload-profile-photo', upload.single('profile_photo'), async (re
         await pool.query('UPDATE users SET profile_photo = ? WHERE id = ?', [profilePhotoPath, userId]);
         res.status(200).send('Profile photo updated successfully');
     } catch (err) {
-        console.error(err);
+        console.error('Error al subir la foto de perfil:', err);
         res.status(500).send('Server error');
     }
 });
@@ -289,7 +276,7 @@ app.get('/user/profile', async (req, res) => {
             res.status(404).send('User not found');
         }
     } catch (err) {
-        console.error(err);
+        console.error('Error al obtener el perfil del usuario:', err);
         res.status(500).send('Server error');
     }
 });
@@ -303,7 +290,7 @@ app.get('/contacts', async (req, res) => {
         `, userId);
         res.json(results);
     } catch (err) {
-        console.error(err);
+        console.error('Error al obtener los contactos:', err);
         res.status(500).send('Server error');
     }
 });
@@ -316,7 +303,7 @@ app.post('/user/update', async (req, res) => {
         await pool.query('UPDATE users SET email = ?, residence = ?, phone = ? WHERE id = ?', [email, residence, phone, userId]);
         res.status(200).send('Profile updated successfully');
     } catch (err) {
-        console.error(err);
+        console.error('Error al actualizar el usuario:', err);
         res.status(500).send('Server error');
     }
 });
@@ -401,6 +388,6 @@ app.post('/changeBid', async (req, res) => {
     }
 })
 
-server.listen(3000, () => {
-    console.log('Listening on port 3000');
+server.listen(process.env.PORT || 3000, () => {
+    console.log(`Listening on port ${process.env.PORT || 3000}`);
 });
