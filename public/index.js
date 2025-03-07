@@ -8,6 +8,10 @@ import mysql from 'mysql2/promise';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+import multer from 'multer';
+
 
 dotenv.config();
 
