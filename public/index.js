@@ -27,9 +27,12 @@ const io = new Server(server, {
 });
 
 app.use(bodyParser.json());
+
 app.use(cors({
-    origin: "*", // Permitir solicitudes desde todos los orígenes
-    methods: ["GET", "POST"]
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
+    credentials: true
 }));
 
 const pool = mysql.createPool({
