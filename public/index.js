@@ -21,14 +21,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Asegúrate de que esta URL sea correcta
+        origin: "*", // Permitir solicitudes desde todos los orígenes
         methods: ["GET", "POST"]
     }
 });
 
 app.use(bodyParser.json());
 app.use(cors({
-    origin: "*" // Asegúrate de que esta URL sea correcta
+    origin: "*", // Permitir solicitudes desde todos los orígenes
+    methods: ["GET", "POST"]
 }));
 
 const pool = mysql.createPool({
@@ -396,8 +397,6 @@ app.post('/changeBid', async (req, res) => {
         res.status(500).send('Error del servidor');
     }
 })
-
-
 
 server.listen(3000, () => {
     console.log('Listening on port 3000');
