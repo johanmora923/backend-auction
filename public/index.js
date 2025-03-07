@@ -7,9 +7,6 @@ import { Server } from 'socket.io';
 import mysql from 'mysql2/promise';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import multer from 'multer';
-import nodemailer from 'nodemailer';
-import crypto from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -21,16 +18,21 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permitir solicitudes desde todos los orígenes
-        methods: ["GET", "POST"]
+        origin: ["http://localhost:5173", "https://frontend-deploy.vercel.app"], // URLs permitidas
+        methods: ["GET", "POST"],
+        credentials: true // Si usas cookies o autenticación
     }
 });
 
+// Middleware
 app.use(bodyParser.json());
+app.use(cors({
+    origin: ["http://localhost:5173", "https://frontend-deploy.vercel.app"], // URLs permitidas
+    methods: ["GET", "POST"],
+    credentials: true
+}));
 
-
-
-
+// Configuración de la base de datos
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -41,104 +43,25 @@ const pool = mysql.createPool({
     queueLimit: parseInt(process.env.DB_QUEUE_LIMIT, 10) || 0
 });
 
-// Claves de cifrado
-const algorithm = 'aes-256-cbc';
-const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex'); // Leer la clave de la variable de entorno y convertirla a un Buffer
-
-const encrypt = (text) => {
-    const iv = crypto.randomBytes(16); // Generar un IV aleatorio para cada cifrado
-    const cipher = crypto.createCipheriv(algorithm, key, iv);
-    console.log('Encrypting: 1', { text, iv: iv.toString('hex'), key: key.toString('hex') });
-    let encrypted = cipher.update(text);
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
-    return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
-};
-
-const decrypt = (text) => {
-    const iv = Buffer.from(text.iv, 'hex');
-    const encryptedText = Buffer.from(text.encryptedData, 'hex');
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    console.log('Decrypting: 2', { iv: text.iv, encryptedData: text.encryptedData, key: key.toString('hex') });
-    let decrypted = decipher.update(encryptedText);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString();
-};
-
+// Configuración de Socket.IO
 io.on('connection', (socket) => {
-    console.log('New client connected');
+    console.log('Nuevo cliente conectado:', socket.id);
 
     socket.on('join', async ({ sender, receiver }) => {
         socket.join(`${sender}-${receiver}`);
         socket.join(`${receiver}-${sender}`);
-
-        try {
-            const [results] = await pool.query(`
-                SELECT message.*, users.name AS sender_username, users.profile_photo AS sender_profile_photo
-                FROM message
-                JOIN users ON message.sender_id = users.id
-                WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-                ORDER BY timestamp
-            `, [sender, receiver, receiver, sender]);
-
-            // Desencriptar los mensajes
-            const decryptedResults = results.map(result => {
-                if (result.iv && result.content) {
-                    const decryptedContent = decrypt({ iv: result.iv, encryptedData: result.content });
-                    return { ...result, content: decryptedContent };
-                }
-                return result;
-            });
-            socket.emit('load messages', decryptedResults);
-        } catch (err) {
-            console.error('Error al cargar los mensajes:', err);
-        }
+        console.log(`Salas unidas: ${sender}-${receiver} y ${receiver}-${sender}`);
     });
 
     socket.on('send message', async (message) => {
-        const { sender_id, receiver_id, content, reply_to } = message;
-        try {
-            // Encriptar el mensaje
-            const encryptedContent = encrypt(content);
-
-            const [result] = await pool.query('INSERT INTO message (sender_id, receiver_id, content, iv, reply_to) VALUES (?, ?, ?, ?, ?)', [sender_id, receiver_id, encryptedContent.encryptedData, encryptedContent.iv, reply_to]);
-            const newMessage = { id: result.insertId, sender_id, receiver_id, content, reply_to, timestamp: new Date() };
-
-            // Desencriptar el mensaje antes de enviarlo al cliente
-            const decryptedMessage = { ...newMessage, content: decrypt({ iv: encryptedContent.iv, encryptedData: encryptedContent.encryptedData }) };
-
-            io.to(`${sender_id}-${receiver_id}`).emit('messages', decryptedMessage);
-        } catch (err) {
-            console.error('Error al enviar el mensaje:', err);
-        }
-    });
-
-    socket.on('get last message', async ({ sender, receiver }) => {
-        try {
-            const [results] = await pool.query(
-                `SELECT *
-                FROM message
-                WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-                ORDER BY timestamp DESC
-                LIMIT 1;`,
-                [sender, receiver, receiver, sender]
-            );
-            if (results.length > 0) {
-                const decryptedContent = decrypt({ iv: results[0].iv, encryptedData: results[0].content });
-                const lastMessage = { ...results[0], content: decryptedContent };
-                socket.emit('last message', lastMessage);
-            } else {
-                socket.emit('last message', null);
-            }
-        } catch (err) {
-            console.error('Error al obtener el último mensaje:', err);
-        }
+        console.log('Mensaje recibido:', message);
+        // Aquí iría la lógica de encriptación y almacenamiento
     });
 
     socket.on('disconnect', () => {
-        console.log('Client disconnected');
+        console.log('Cliente desconectado:', socket.id);
     });
 });
-
 
 nodemailer.createTestAccount((err, account) => {
     if (err) {
