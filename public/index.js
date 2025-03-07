@@ -21,7 +21,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permitir solicitudes desde todos los orígenes, REVISA ESTO EN PRODUCCION
+        origin: "*", // Permitir solicitudes desde todos los orígenes
         methods: ["GET", "POST"]
     }
 });
