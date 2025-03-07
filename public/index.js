@@ -276,7 +276,7 @@ app.get('/user/profile', async (req, res) => {
             const user = results[0];
             // Ajustar la ruta de la imagen para que sea completa
             if (user.profile_photo) {
-                user.profile_photo = `https://backend-auction-app-web.vercel.app${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
+                user.profile_photo = `https://backend-auction.onrender.com${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
             }
             res.json(user);
         } else {
