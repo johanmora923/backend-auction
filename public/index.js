@@ -7,11 +7,10 @@ import { Server } from 'socket.io';
 import mysql from 'mysql2/promise';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import multer from 'multer';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
-import multer from 'multer';
-
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -22,50 +21,129 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "https://aution.vercel.app"], // URLs permitidas
-        methods: ["GET", "POST"],
-        credentials: true // Si usas cookies o autenticación
+        origin: "https://aution.vercel.app",
+        methods: ["GET", "POST"]
     }
 });
 
-// Middleware
 app.use(bodyParser.json());
-app.use(cors({
-    origin: ["http://localhost:5173", "https://aution.vercel.app"], // URLs permitidas
-    methods: ["GET", "POST"],
-    credentials: true
-}));
+app.use(cors()); // Habilitar CORS para todas las solicitudes
 
-// Configuración de la base de datos
 const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_DATABASE,
+    host: 'bhho6swvu7ebona9c61t-mysql.services.clever-cloud.com',
+    user: 'u1ubotl5zkze8jbg',
+    password: 'P9UCmh1dsnRyAV8988ro',
+    database: 'bhho6swvu7ebona9c61t',
     waitForConnections: true,
-    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 10) || 50,
-    queueLimit: parseInt(process.env.DB_QUEUE_LIMIT, 10) || 0
+    connectionLimit: 50,
+    queueLimit: 0
 });
 
-// Configuración de Socket.IO
+// Claves de cifrado
+const algorithm = 'aes-256-cbc';
+const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex'); // Leer la clave de la variable de entorno y convertirla a un Buffer
+console.log(key)
+const encrypt = (text) => {
+    const iv = crypto.randomBytes(16); // Generar un IV aleatorio para cada cifrado
+    console.log(iv,'1')
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    console.log(key,'1')
+    console.log(cipher,'1')
+    console.log('Encrypting: 1', { text, iv: iv.toString('hex'), key: key.toString('hex') });
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
+};
+
+const decrypt = (text) => {
+    const iv = Buffer.from(text.iv, 'hex');
+    console.log(iv,'2')
+    const encryptedText = Buffer.from(text.encryptedData, 'hex');
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    console.log(key,'2')
+    console.log(decipher,'2')
+    console.log('Decrypting: 2', { iv: text.iv, encryptedData: text.encryptedData, key: key.toString('hex') });
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+};
+
 io.on('connection', (socket) => {
-    console.log('Nuevo cliente conectado:', socket.id);
+    console.log('New client connected');
 
     socket.on('join', async ({ sender, receiver }) => {
         socket.join(`${sender}-${receiver}`);
         socket.join(`${receiver}-${sender}`);
-        console.log(`Salas unidas: ${sender}-${receiver} y ${receiver}-${sender}`);
+
+        try {
+            const [results] = await pool.query(`
+                SELECT message.*, users.name AS sender_username, users.profile_photo AS sender_profile_photo
+                FROM message
+                JOIN users ON message.sender_id = users.id
+                WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+                ORDER BY timestamp
+            `, [sender, receiver, receiver, sender]);
+            console.log(results)
+
+            // Desencriptar los mensajes
+            const decryptedResults = results.map(result => {
+                if (result.iv && result.content) {
+                    const decryptedContent = decrypt({ iv: result.iv, encryptedData: result.content });
+                    return { ...result, content: decryptedContent };
+                }
+                return result;
+            });
+            socket.emit('load messages', decryptedResults);
+        } catch (err) {
+            console.error(err,'aqui');
+        }
     });
 
     socket.on('send message', async (message) => {
-        console.log('Mensaje recibido:', message);
-        // Aquí iría la lógica de encriptación y almacenamiento
+        const { sender_id, receiver_id, content, reply_to } = message;
+        try {
+            // Encriptar el mensaje
+            const encryptedContent = encrypt(content);
+
+            const [result] = await pool.query('INSERT INTO message (sender_id, receiver_id, content, iv, reply_to) VALUES (?, ?, ?, ?, ?)', [sender_id, receiver_id, encryptedContent.encryptedData, encryptedContent.iv, reply_to]);
+            const newMessage = { id: result.insertId, sender_id, receiver_id, content, reply_to, timestamp: new Date() };
+
+            // Desencriptar el mensaje antes de enviarlo al cliente
+            const decryptedMessage = { ...newMessage, content: decrypt({ iv: encryptedContent.iv, encryptedData: encryptedContent.encryptedData }) };
+
+            io.to(`${sender_id}-${receiver_id}`).emit('messages', decryptedMessage);
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    socket.on('get last message', async ({ sender, receiver }) => {
+        try {
+            const [results] = await pool.query(
+                `SELECT *
+                FROM message
+                WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+                ORDER BY timestamp DESC
+                LIMIT 1;`,
+                [sender, receiver, receiver, sender]
+            );
+            if (results.length > 0) {
+                const decryptedContent = decrypt({ iv: results[0].iv, encryptedData: results[0].content });
+                const lastMessage = { ...results[0], content: decryptedContent };
+                socket.emit('last message', lastMessage);
+            } else {
+                socket.emit('last message', null);
+            }
+        } catch (err) {
+            console.error(err);
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('Cliente desconectado:', socket.id);
+        console.log('Client disconnected');
     });
 });
+
 
 nodemailer.createTestAccount((err, account) => {
     if (err) {
@@ -101,7 +179,7 @@ nodemailer.createTestAccount((err, account) => {
                 to: email,
                 subject: 'Verificación de correo electrónico',
                 html: `<p>Por favor, verifica tu correo electrónico haciendo clic en el siguiente enlace:</p>
-                    <a href="https://aution.vercel.app//verify-email?token=${token}">Verificar correo electrónico</a>
+                    <a href="https://aution.vercel.app/verify-email?token=${token}">Verificar correo electrónico</a>
                     <p>El enlace expira en 1 hora.</p>`
             };
             // Enviar el correo electrónico
@@ -120,9 +198,11 @@ nodemailer.createTestAccount((err, account) => {
     // Endpoint para verificar el correo electrónico
     app.get('/verify-email', async (req, res) => {
         const { token } = req.query;
+        console.log(token)
         try {
             // Verificar si el token existe y no ha expirado
             const [results] = await pool.query('SELECT id FROM users WHERE email_verification_token = ?', [token]);
+            console.log(results)
             if (results.length > 0) {
                 const userId = results[0].id;
                 // Actualizar al usuario para marcar el correo como verificado
@@ -182,7 +262,7 @@ app.post('/user/upload-profile-photo', upload.single('profile_photo'), async (re
         await pool.query('UPDATE users SET profile_photo = ? WHERE id = ?', [profilePhotoPath, userId]);
         res.status(200).send('Profile photo updated successfully');
     } catch (err) {
-        console.error('Error al subir la foto de perfil:', err);
+        console.error(err);
         res.status(500).send('Server error');
     }
 });
@@ -196,14 +276,14 @@ app.get('/user/profile', async (req, res) => {
             const user = results[0];
             // Ajustar la ruta de la imagen para que sea completa
             if (user.profile_photo) {
-                user.profile_photo = `https://backend-auction-sigma.vercel.app/${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
+                user.profile_photo = `https://backend-auction-app-web.vercel.app${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
             }
             res.json(user);
         } else {
             res.status(404).send('User not found');
         }
     } catch (err) {
-        console.error('Error al obtener el perfil del usuario:', err);
+        console.error(err);
         res.status(500).send('Server error');
     }
 });
@@ -217,7 +297,7 @@ app.get('/contacts', async (req, res) => {
         `, userId);
         res.json(results);
     } catch (err) {
-        console.error('Error al obtener los contactos:', err);
+        console.error(err);
         res.status(500).send('Server error');
     }
 });
@@ -230,7 +310,7 @@ app.post('/user/update', async (req, res) => {
         await pool.query('UPDATE users SET email = ?, residence = ?, phone = ? WHERE id = ?', [email, residence, phone, userId]);
         res.status(200).send('Profile updated successfully');
     } catch (err) {
-        console.error('Error al actualizar el usuario:', err);
+        console.error(err);
         res.status(500).send('Server error');
     }
 });
@@ -315,6 +395,8 @@ app.post('/changeBid', async (req, res) => {
     }
 })
 
-server.listen(process.env.PORT || 3000, () => {
-    console.log(`Listening on port ${process.env.PORT || 3000}`);
+
+
+server.listen(3000, () => {
+    console.log('Listening on port 3000');
 });
