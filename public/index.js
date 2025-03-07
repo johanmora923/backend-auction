@@ -18,7 +18,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "https://frontend-deploy.vercel.app"], // URLs permitidas
+        origin: ["http://localhost:5173", "https://aution.vercel.app"], // URLs permitidas
         methods: ["GET", "POST"],
         credentials: true // Si usas cookies o autenticación
     }
@@ -27,7 +27,7 @@ const io = new Server(server, {
 // Middleware
 app.use(bodyParser.json());
 app.use(cors({
-    origin: ["http://localhost:5173", "https://frontend-deploy.vercel.app"], // URLs permitidas
+    origin: ["http://localhost:5173", "https://aution.vercel.app"], // URLs permitidas
     methods: ["GET", "POST"],
     credentials: true
 }));
@@ -97,7 +97,7 @@ nodemailer.createTestAccount((err, account) => {
                 to: email,
                 subject: 'Verificación de correo electrónico',
                 html: `<p>Por favor, verifica tu correo electrónico haciendo clic en el siguiente enlace:</p>
-                    <a href="https://aution.vercel.app/verify-email?token=${token}">Verificar correo electrónico</a>
+                    <a href="https://aution.vercel.app//verify-email?token=${token}">Verificar correo electrónico</a>
                     <p>El enlace expira en 1 hora.</p>`
             };
             // Enviar el correo electrónico
@@ -192,7 +192,7 @@ app.get('/user/profile', async (req, res) => {
             const user = results[0];
             // Ajustar la ruta de la imagen para que sea completa
             if (user.profile_photo) {
-                user.profile_photo = `https://backend-auction-app-web.vercel.app${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
+                user.profile_photo = `https://backend-auction-sigma.vercel.app/${user.profile_photo.replace(/ /g, '%20')}`; // Reemplazar espacios con %20
             }
             res.json(user);
         } else {
