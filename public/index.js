@@ -28,7 +28,7 @@ const io = new Server(server, {
 
 app.use(bodyParser.json());
 app.use(cors({
-    origin: "https://aution.vercel.app" // Asegúrate de que esta URL sea correcta
+    origin: "*" // Asegúrate de que esta URL sea correcta
 }));
 
 const pool = mysql.createPool({
