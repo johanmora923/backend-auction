@@ -21,7 +21,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "https://aution.vercel.app",
+        origin: function (origin, callback) {
+            const allowedOrigins = ["https://aution.vercel.app", "http://localhost:5173"];
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true); // Se permite la solicitud
+            } else {
+                callback(new Error("Not allowed by CORS")); // Se rechaza la solicitud
+            }
+        },
         methods: ["GET", "POST"]
     }
 });
